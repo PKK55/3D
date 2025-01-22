@@ -1,0 +1,151 @@
+<!DOCTYPE html>
+<html>
+    <head>
+        <meta
+            charset="utf-8"
+            name="viewport"
+            content="width=device-width, initial-scale=1"
+        />
+        <script type="importmap">
+            {
+                "imports": {
+                    "three": "https://cdn.jsdelivr.net/npm/three@0.167.0/build/three.module.js",
+                    "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.167.0/examples/jsm/"
+                }
+            }
+        </script>
+        <script type="module">
+            import * as THREE from 'three'
+            import { OrbitControls } from 'three/addons/controls/OrbitControls.js'
+            import { OBJLoader } from 'three/addons/loaders/OBJLoader.js'
+            import { MTLLoader } from 'three/addons/loaders/MTLLoader.js'
+            import { RGBELoader } from 'three/addons/loaders/RGBELoader.js'
+
+            // サイズを指定
+            const width = 960
+            const height = 540
+
+            // レンダラーを作成
+            const renderer = new THREE.WebGLRenderer({
+                canvas: document.querySelector('#myCanvas'),
+            })
+            renderer.setPixelRatio(window.devicePixelRatio)
+            renderer.setSize(width, height)
+
+            // シーンを作成
+            const scene = new THREE.Scene()
+
+            // カメラを作成
+            const camera = new THREE.PerspectiveCamera(
+                45,
+                width / height,
+                1,
+                9999
+            )
+            camera.up.set(0, 1, 0)
+            camera.position.set(0, 100, 0)
+
+            // カメラコントローラーを作成
+            const controls = new OrbitControls(
+                camera,
+                document.querySelector('#myCanvas')
+            )
+
+            // 滑らかにカメラコントローラーを制御する
+            controls.enableDamping = true
+            controls.dampingFactor = 0.2
+
+            // ライトを作成
+            const light = new THREE.AmbientLight(0xffffff)
+            light.intensity = 2
+            light.position.set(1, 1, 1)
+            scene.add(light)
+
+            // 環境・背景テクスチャの設定
+            new RGBELoader().load('./stadium_01_4k.hdr', function (texture) {
+                texture.mapping = THREE.EquirectangularReflectionMapping
+                scene.background = texture
+                scene.environment = texture
+            })
+
+            //ローダーを作成
+            const mtlLoader = new MTLLoader()
+            mtlLoader.load(
+                './soccer_robot.mtl',
+                // ロード完了時の処理
+                function (materials) {
+                    materials.preload()
+
+                    const objLoader = new OBJLoader()
+                    // OBJファイルの読み込み
+                    objLoader
+                        .setMaterials(materials) // マテリアルの指定
+                        .load(
+                            './soccer_robot.obj',
+                            // ロード完了時の処理
+                            function (object) {
+                                //　　オブジェクトの初期位置の調整
+                                object.scale.set(10, 10, 10)
+                                object.rotation.set(-Math.PI / 2, 0, 0)
+                                object.position.set(0, -250, 0)
+
+                                // シーンへのモデルの追加
+                                scene.add(object)
+                            }
+                        )
+                }
+            )
+
+            //const size = 10
+            //scene.add(new THREE.AxesHelper(size))
+
+            // 初期化のために実行
+            onResize()
+            // リサイズイベント発生時に実行
+            window.addEventListener('resize', onResize)
+
+            function onResize() {
+                // サイズを取得
+                const width = window.innerWidth
+                const height = window.innerHeight
+
+                // レンダラーのサイズを調整する
+                renderer.setPixelRatio(window.devicePixelRatio)
+                renderer.setSize(width, height)
+
+                // カメラのアスペクト比を正す
+                camera.aspect = width / height
+                camera.updateProjectionMatrix()
+            }
+
+            //初回実行
+            tick()
+
+            function tick() {
+                // カメラコントローラーを更新
+                controls.update()
+
+                // カメラの自動移動
+                camera.position.x = 2000 * Math.sin(Date.now() / 3000)
+                camera.position.z = 2000 * Math.cos(Date.now() / 3000)
+                camera.lookAt(0, -100, 0)
+
+                // レンダリング
+                renderer.render(scene, camera)
+
+                // レンダリングを繰り返す
+                requestAnimationFrame(tick)
+            }
+        </script>
+    </head>
+    <body>
+        <canvas id="myCanvas"></canvas>
+    </body>
+</html>
+
+<style>
+    body {
+        margin: 0;
+        overflow: hidden;
+    }
+</style>
