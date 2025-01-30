@@ -31,6 +31,7 @@
 
             // Create an array representing the active state of each cell.
             const cellStateArray = new Uint32Array(GRID_SIZE * GRID_SIZE)
+
             // Create a storage buffer to hold the cell state.
             const cellStateStorage = [
                 device.createBuffer({
@@ -44,15 +45,21 @@
                     usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST,
                 }),
             ]
-            // Mark every third cell of the grid as active.
-            for (let i = 0; i < cellStateArray.length; i += 3) {
-                cellStateArray[i] = 1
+            // // Mark every third cell of the grid as active.
+            // for (let i = 0; i < cellStateArray.length; i += 3) {
+            //     cellStateArray[i] = 1
+            // }
+            // device.queue.writeBuffer(cellStateStorage[0], 0, cellStateArray)
+            // for (let i = 0; i < cellStateArray.length; i++) {
+            //     cellStateArray[i] = i % 2
+            // }
+            // device.queue.writeBuffer(cellStateStorage[1], 0, cellStateArray)
+
+            // Set each cell to a random state, then copy the JavaScript array into the storage buffer.
+            for (let i = 0; i < cellStateArray.length; i++) {
+                cellStateArray[i] = Math.random() > 0.6 ? 1 : 0
             }
             device.queue.writeBuffer(cellStateStorage[0], 0, cellStateArray)
-            for (let i = 0; i < cellStateArray.length; i++) {
-                cellStateArray[i] = i % 2
-            }
-            device.queue.writeBuffer(cellStateStorage[1], 0, cellStateArray)
 
             const uniformArray = new Float32Array([GRID_SIZE, GRID_SIZE])
             const uniformBuffer = device.createBuffer({
@@ -142,17 +149,46 @@
                     @group(0) @binding(2) var<storage, read_write> cellStateOut: array<u32>;
                         
                     fn cellIndex(cell: vec2u) -> u32 {
-                        return cell.y * u32(grid.x) + cell.x;
+                        return (cell.y % u32(grid.y)) * u32(grid.x) + (cell.x % u32(grid.x));
+                        // アクセスが範囲外の場合はラップアラウンドによって解決
                     }
-                    
+
+                    fn cellActive (x: u32, y: u32) -> u32 {
+                        return cellStateIn[cellIndex(vec2(x, y))];
+                    }
                     @compute
                     @workgroup_size(${WORKGROUP_SIZE}, ${WORKGROUP_SIZE}) 
                     fn computeMain(@builtin(global_invocation_id) cell: vec3u) {
-                        if (cellStateIn[cellIndex(cell.xy)] == 1) {
-                            cellStateOut[cellIndex(cell.xy)] = 0;
-                        } 
-                        else {
-                            cellStateOut[cellIndex(cell.xy)] = 1;
+                        // if (cellStateIn[cellIndex(cell.xy)] == 1) {
+                        //     cellStateOut[cellIndex(cell.xy)] = 0;
+                        // } 
+                        // else {
+                        //     cellStateOut[cellIndex(cell.xy)] = 1;
+                        // }
+
+                        // Determine the number of active neighbors for the current cell.
+                        let activeNeighbors = cellActive(cell.x+1, cell.y+1) + 
+                                              cellActive(cell.x+1, cell.y) +
+                                              cellActive(cell.x+1, cell.y-1) +
+                                              cellActive(cell.x, cell.y-1) +
+                                              cellActive(cell.x-1, cell.y-1) +
+                                              cellActive(cell.x-1, cell.y) +
+                                              cellActive(cell.x-1, cell.y+1) +
+                                              cellActive(cell.x, cell.y+1);
+
+                        let i = cellIndex(cell.xy);
+
+                        // Conway's game of life rules:
+                        switch activeNeighbors {
+                            case 2: { // Active cells with 2 neighbors stay active.
+                                cellStateOut[i] = cellStateIn[i];
+                            }
+                            case 3: { // Cells with 3 neighbors become or stay active.
+                                cellStateOut[i] = 1;
+                            }
+                            default: { // Cells with < 2 or > 3 neighbors become inactive.
+                                cellStateOut[i] = 0;
+                            }
                         }
                     }
                 `,
@@ -165,7 +201,9 @@
                     {
                         binding: 0,
                         visibility:
-                            GPUShaderStage.VERTEX| GPUShaderStage.FRAGMENT | GPUShaderStage.COMPUTE,
+                            GPUShaderStage.VERTEX |
+                            GPUShaderStage.FRAGMENT |
+                            GPUShaderStage.COMPUTE,
                         buffer: {}, // Grid uniform buffer
                     },
                     {
